@@ -1,4 +1,16 @@
 # Tutorial.1 Convolutional Neural Network: ResNet
+
+## 導入
+チュートリアルの第1回は畳み込みネットワーク(以下CNN)と画像分類について学習します．
+まずはじめにCNNとは何かと有名なCNNのモデルについて学習し，その後PyTorchの使い方を説明し，最後は実際にCNNを実装し，画像分類を実行します．
+
+- Python
+- ニューラルネットワークに関する基礎的な知識
+- 機械学習に関する基礎的な知識
+
+があることが本記事を読むうえで必要となります．  
+本やネットで勉強はしたが，実際にどう作ればいいのかが分からない人向けの記事です．
+
 ## 畳み込みニューラルネットワーク(Convolutional Neural Network: CNN)とは
 
 CNNは，畳み込み層やプーリング層(ないことも多い)を中心に構成されるニューラルネットワークのことです．今回のチュートリアルでは画像を扱いますが，画像だけでなく自然言語，音声など様々なタスクで使用されるネットワークです．  
@@ -92,10 +104,10 @@ torch.Tensorは比較的NumPyライクに作られてはいますが，x.viewで
 PyTorchで画像を扱う場合のモデルの入力は，(Batch Size, Channel, Height, Width)となっており，Kerasなどとは異なるので注意．(kerasは(B, H, W, C))
 
 
-	ResNetの実装
-[https://gyazo.com/43fc0765d6a06a4fcb4c8c83ad9ae541]
+### ResNetの実装
 
-今回はResNet34を実装します．
+今回はResNet18を実装します．
+まずはResNet18に用いるBasic Blockの実装が以下のコードです．
 
 ```python
  #  kernel_sizeが3x3，padding=stride=1のconvは非常によく使用するので、関数で簡単い呼べるようにする
@@ -139,6 +151,8 @@ PyTorchで画像を扱う場合のモデルの入力は，(Batch Size, Channel, 
          return self.relu(out)
 ```
 
+これらをまとめてひとつのモジュールにします．  
+
 ```python
  class ResidualLayer(nn.Module):
 
@@ -160,46 +174,175 @@ PyTorchで画像を扱う場合のモデルの入力は，(Batch Size, Channel, 
          return out
 ```
 
+そしてResNet18の全容がこちら．
+
 ``` python
 
- class ResNet34(nn.Module):
+import torch
+import torch.nn as nn
 
-     def __init__(self, num_classes):
-         super(ResNet34, self).__init__()
-         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3)
-         self.bn1 = nn.BatchNorm2d(64)
-         self.relu = nn.ReLU(inplace=True)
-         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-         self.layer1 = ResidualLayer(num_blocks=3, in_channels=64, out_channels=64)
-         self.layer2 = ResidualLayer(num_blocks=4, in_channels=64, out_channels=128)
-         self.layer3 = ResidualLayer(num_blocks=6, in_channels=128, out_channels=256)
-         self.layer4 = ResidualLayer(num_blocks=3, in_channels=256, out_channels=512)
-         self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
-         self.fc = nn.Linear(512, num_classes)
+from . import layers
 
-     def forward(self, x):
-         out = self.conv1(x)
-         out = self.bn1(out)
-         out = self.relu(out)
-         out = self.maxpool(out)
 
-         out = self.layer1(out)
-         out = self.layer2(out)
-         out = self.layer3(out)
-         out = self.layer4(out)
+class ResNet18(nn.Module):
 
-         out = self.avg_pool(out)
-         out = out.view(out.size(0), -1)
-         out = self.fc(out)
+   def __init__(self, num_classes):
+       super(ResNet18, self).__init__()
+       self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3)
+       self.bn1 = nn.BatchNorm2d(64)
+       self.relu = nn.ReLU(inplace=True)
+       self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+       self.layer1 = layers.ResidualLayer(2, in_channels=64, out_channels=64)
+       self.layer2 = layers.ResidualLayer(2, in_channels=64, out_channels=128)
+       self.layer3 = layers.ResidualLayer(
+           2, in_channels=128, out_channels=256)
+       self.layer4 = layers.ResidualLayer(
+           2, in_channels=256, out_channels=512)
+       self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+       self.fc = nn.Linear(512, num_classes)
 
-         return out
+   def forward(self, x):
+       out = self.conv1(x)
+       out = self.bn1(out)
+       out = self.relu(out)
+       out = self.maxpool(out)
 
- if __name__ == '__main__':
-     inputs = torch.zeros((16, 3, 224, 224))
-     model = ResNet34(num_classes=10)
-     outputs = model(inputs)  # [16, 3, 224, 224] -> [16, 10]
-     print(outputs.size())
-     ```
+       out = self.layer1(out)
+       out = self.layer2(out)
+       out = self.layer3(out)
+       out = self.layer4(out)
+
+       out = self.avg_pool(out)
+       out = out.view(out.size(0), -1)
+       out = self.fc(out)
+
+       return out
+
+
+if __name__ == '__main__':
+   inputs = torch.zeros((16, 3, 227, 227))
+   model = ResNet18(num_classes=10)
+   outputs = model(inputs)  # [16, 3, 227, 227] -> [16, 10]
+   print(outputs.size()) # [16, 3, 224, 224] -> [16, 10]
+
+```
 
 
 ## ResNetを用いた画像認識
+
+今回はtorchvisionに用意されている[CIFAR10](https://www.cs.toronto.edu/~kriz/cifar.html)というデータセットを用います．  
+
+```python
+
+import torch
+import torch.nn as nn
+
+import torchvision
+from torch.utils.data import DataLoader
+from torchvision import transforms
+
+import config
+from resnet import ResNet18
+
+
+class Trainer:
+
+    def __init__(self, model, optimizer, criterion):
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.model = model.to(self.device)
+        self.optimizer = optimizer
+        self.criterion = criterion
+
+    def epoch_train(self, train_loader):
+        self.model.train()
+        epoch_loss = 0
+        correct = 0
+        total = 0
+
+        for batch_idx, (inputs, targets) in enumerate(train_loader):
+            inputs = inputs.to(self.device)
+            targets = targets.to(self.device).long()
+
+            self.optimizer.zero_grad()
+
+            outputs = self.model(inputs)
+            loss = self.criterion(outputs, targets)
+            loss.backward()
+            self.optimizer.step()
+
+            epoch_loss += loss.item()
+            _, predicted = torch.max(outputs.data, 1)
+            total += targets.size(0)
+            correct += predicted.eq(targets.data).cpu().sum().item()
+
+        epoch_loss /= len(train_loader)
+        acc = 100 * correct / total
+        return epoch_loss, acc
+
+    def epoch_valid(self, valid_loader):
+        self.model.eval()
+        epoch_loss = 0
+        correct = 0
+        total = 0
+
+        for batch_idx, (inputs, targets) in enumerate(valid_loader):
+            inputs = inputs.to(self.device)
+            targets = targets.to(self.device).long()
+            outputs = self.model(inputs)
+            loss = self.criterion(outputs, targets)
+
+            epoch_loss += loss.item()
+            _, predicted = torch.max(outputs.data, 1)
+            total += targets.size(0)
+            correct += predicted.eq(targets.data).cpu().sum().item()
+
+        epoch_loss /= len(valid_loader)
+        acc = 100 * correct / total
+        return epoch_loss, acc
+
+    @property
+    def params(self):
+        return self.model.state_dict()
+
+
+if __name__ == '__main__':
+    model = ResNet18(10)
+    optimizer = torch.optim.SGD(model.parameters(),
+                                lr=0.001,
+                                momentum=0.9,
+                                weight_decay=1e-4)
+    criterion = nn.CrossEntropyLoss()
+
+    trainer = Trainer(model, optimizer, criterion)
+
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+    ])
+
+    dtrain = torchvision.datasets.CIFAR10(
+        './data/', train=True, transform=transform, download=True)
+    dvalid = torchvision.datasets.CIFAR10(
+        './data/', train=False, transform=transform, download=True)
+
+    train_loader = DataLoader(dtrain, batch_size=config.BATCH_SIZE, shuffle=True,
+                              drop_last=True)
+    valid_loader = DataLoader(dvalid, batch_size=config.BATCH_SIZE)
+
+    best_acc = -1
+    for epoch in range(1, 1 + config.NUM_EPOCHS):
+        train_loss, train_acc = trainer.epoch_train(train_loader)
+        valid_loss, valid_acc = trainer.epoch_valid(valid_loader)
+
+        if valid_acc > best_acc:
+            best_acc = valid_acc
+            best_params = trainer.params
+
+        print(f'EPOCH: {epoch} / {num_epochs}')
+        print(f'TRAIN LOSS: {train_loss:.3f}, TRAIN ACC: {train_acc:.3f}')
+        print(f'VALID LOSS: {valid_loss:.3f}, VALID ACC: {valid_acc:.3f}')
+
+    torch.save(best_params, 'weight.pth')
+
+
+```
